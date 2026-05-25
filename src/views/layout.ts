@@ -114,6 +114,111 @@ const STYLE = `
     margin-left: 8px;
   }
   .empty { color: var(--muted); font-style: italic; padding: 24px 0; }
+
+  .version-badge {
+    display: inline-block;
+    background: var(--code);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .cap-pill {
+    display: inline-block;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--fg);
+    padding: 0 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    margin-right: 4px;
+    margin-top: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .cap-pill.feat { border-color: var(--accent); color: var(--accent); }
+  .row-meta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-all;
+  }
+  .row-meta a { color: var(--muted); }
+  .row-meta a:hover { color: var(--accent); }
+  .json-link {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 6px;
+    display: inline-block;
+  }
+  .updated {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    display: block;
+  }
+
+  section.detail { margin-top: 28px; }
+  section.detail h2 { font-size: 16px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  section.detail dl { display: grid; grid-template-columns: 220px 1fr; gap: 4px 16px; margin: 0; }
+  section.detail dt {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 6px 0;
+  }
+  section.detail dd {
+    margin: 0;
+    padding: 6px 0;
+    font-size: 14px;
+    word-break: break-all;
+  }
+  section.detail dd.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  section.detail dd .none { color: var(--muted); font-style: italic; font-size: 13px; }
+  pre.raw-doc {
+    background: var(--code);
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 8px 0 0;
+  }
+  details.raw > summary {
+    cursor: pointer;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: var(--accent);
+    padding: 4px 0;
+  }
+  .breadcrumb {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+  .breadcrumb a { color: var(--muted); }
+  .breadcrumb a:hover { color: var(--accent); }
+  .lede {
+    font-size: 15px;
+    color: var(--muted);
+    margin: 0 0 16px;
+  }
+  @media (max-width: 640px) {
+    section.detail dl { grid-template-columns: 1fr; gap: 0 0; }
+    section.detail dt { padding-top: 10px; padding-bottom: 0; }
+    section.detail dd { padding-top: 2px; }
+  }
 `;
 
 export interface LayoutOpts {
