@@ -9,6 +9,7 @@ import { PgStore } from './lib/store/postgres.js';
 import type { Store } from './lib/store/index.js';
 import { healthRoutes } from './routes/health.js';
 import { createListingRoutes } from './routes/listings.js';
+import { createReadRoutes } from './routes/read.js';
 
 export interface AppDeps {
   store: Store;
@@ -35,6 +36,10 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   app.route('/', healthRoutes);
+  // Read routes mount first so the CORS preflight handler answers OPTIONS
+  // before the write router. Method matching means GET-handlers in read
+  // don't shadow POST/PATCH/DELETE in listings.
+  app.route('/v1/listings', createReadRoutes(deps));
   app.route('/v1/listings', createListingRoutes(deps));
 
   return app;
