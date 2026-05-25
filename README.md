@@ -13,67 +13,114 @@ discovery.
 
 ## Status
 
-**v0.1 — Working Draft.** Not yet deployed; tracking the
-`spec/directory.md` v0.1 surface.
+**v0.1 — Working Draft.** Tracking the `spec/directory.md` v0.1 surface.
 
 ## Stack
 
-- **Runtime**: Node 20+, [Hono](https://hono.dev/) HTTP framework
-- **Storage**: Postgres 16 (listings), Redis 7 (challenges, sessions, rate limits)
-- **Scheduler**: in-process `node-cron`
+- **Runtime**: Node 20 + [Hono](https://hono.dev/) HTTP framework
+- **Storage**: Postgres 16 (listings), Redis 7 (challenges, sessions, rate limits, cron lock)
+- **Scheduler**: in-process `node-cron` (default `0 6 * * *` UTC daily)
 - **Hosting**: Railway (production), Docker Compose (local dev)
-- **Validation**: Zod against `schemas/listing.json` and `schemas/well-known.json` from the spec
+- **Validation**: Zod mirroring `schemas/listing.json` and `schemas/well-known.json` from the spec
+- **Tests**: Vitest with MSW (outbound fetch) and ioredis-mock (Redis)
 
 ## Local development
 
 ```bash
-# 1. Install deps
 pnpm install
 
-# 2. Start Postgres + Redis
+# Postgres + Redis on default ports
 docker compose up -d
 
-# 3. Configure env
 cp .env.example .env
 
-# 4. Run migrations
+# Apply migrations
 pnpm migrate
 
-# 5. Start dev server (auto-reloads on change)
+# Hot-reload dev server on :3000
 pnpm dev
+
+# Or: standalone preview with seeded in-memory data, no DB needed
+pnpm preview
 ```
 
-Server listens on `http://localhost:3000`. Smoke-test:
+Smoke-test:
 
 ```bash
 curl -s localhost:3000/healthz
 # {"status":"ok"}
+
+curl -s localhost:3000/v1/listings
+# {"listings":[],"next_cursor":null}
 ```
 
 ## Tests
 
 ```bash
-pnpm test          # one-shot
-pnpm test:watch    # watch mode
-pnpm typecheck     # tsc --noEmit
+pnpm test           # one-shot
+pnpm test:watch     # watch mode
+pnpm typecheck      # tsc --noEmit
+pnpm build          # production bundle
 ```
 
-## Endpoints (planned)
+77 tests covering tokens, schemas, the storage layer, the §4 listing
+protocol (challenge / submit / patch / delete + re-challenge), the §5
+read API (pagination, filters, CORS, cache), the §7 revalidation state
+machine (three-fail-then-stale, grace-period sweep, Redis advisory
+lock), the admin cron trigger, and the §9/§10 governance pages.
 
-Tracking [`spec/directory.md`](https://github.com/AFAuthHQ/spec/blob/main/spec/directory.md):
+## Endpoints
 
-| Method | Path | Phase | Status |
-|---|---|---|---|
-| GET    | `/healthz`                          | 1 | ✅ implemented |
-| POST   | `/v1/listings/challenge`            | 2 | pending |
-| POST   | `/v1/listings`                      | 2 | pending |
-| PATCH  | `/v1/listings/{service_did}`        | 2 | pending |
-| DELETE | `/v1/listings/{service_did}`        | 2 | pending |
-| GET    | `/v1/listings`                      | 3 | pending |
-| GET    | `/v1/listings/{service_did}`        | 3 | pending |
-| GET    | `/` (browse UI)                     | 5 | pending |
-| GET    | `/operator`                         | 5 | pending |
-| GET    | `/policy`                           | 5 | pending |
+| Method | Path | Purpose |
+|---|---|---|
+| GET    | `/healthz`                     | Liveness probe |
+| GET    | `/`                            | Browse UI (HTML) |
+| GET    | `/operator`                    | Operator commitment (§9) |
+| GET    | `/policy`                      | Take-down policy (§10) |
+| POST   | `/v1/listings/challenge`       | Request a registration challenge (§4.1) |
+| POST   | `/v1/listings`                 | Submit a listing or re-challenge an existing one (§4.1, §4.3) |
+| PATCH  | `/v1/listings/{service_did}`   | Update a listing (§4.2) — bearer session token |
+| DELETE | `/v1/listings/{service_did}`   | Soft-delete a listing (§4.2) — bearer session token |
+| GET    | `/v1/listings`                 | Paginated list with `cursor`, `limit`≤100, `search`, `tag`, `updated_since`, `status`, `include_deleted` (§5) |
+| GET    | `/v1/listings/{service_did}`   | Single listing (§5) |
+| POST   | `/admin/cron/revalidate`       | Force a revalidation tick — bearer `REGISTRY_CRON_SECRET` |
+
+## Rate limits
+
+Defaults are per-IP fixed-window counters in Redis.
+
+| Endpoint group | Limit |
+|---|---|
+| `POST /v1/listings/challenge`     | 30 / minute |
+| `POST /v1/listings`               | 10 / minute |
+| `PATCH/DELETE /v1/listings/...`   | 30 / minute |
+| `GET /v1/listings*`               | 600 / minute |
+
+In addition, **per-host** challenge issuance is capped at 10 active
+challenges per hour to make submission spam against a single discovery
+host harder.
+
+## Deploying to Railway
+
+The service deploys cleanly as a single Railway container. From the
+Railway dashboard:
+
+1. **New project** → "Deploy from GitHub repo" → `AFAuthHQ/registry`.
+2. Add a **Postgres** plugin (Railway → +New → Database → Postgres).
+   `DATABASE_URL` is injected automatically into the service.
+3. Add a **Redis** plugin. `REDIS_URL` is injected automatically.
+4. Set environment variables on the service:
+   - `REGISTRY_CRON_SECRET` — long random string for the admin route
+   - `REGISTRY_ADMIN_SECRET` — long random string (reserved for future admin routes)
+   - `NODE_ENV=production`
+   - `LOG_LEVEL=info` (or `debug` during shakedown)
+   - `PUBLIC_BASE_URL=https://registry.afauth.org`
+   - `REGISTRY_CRON_SCHEDULE=0 6 * * *` (optional; defaults to daily 06:00 UTC)
+5. **Custom domain** → add `registry.afauth.org`; Railway will provide
+   a CNAME target to set in DNS.
+6. First deploy will run migrations on boot via `PgStore.init()`.
+
+Build is via the included `Dockerfile`; Railway picks it up automatically.
 
 ## License
 

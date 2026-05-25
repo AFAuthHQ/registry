@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import type Redis from 'ioredis';
 import { z } from 'zod';
 import { RegistryError } from '../lib/errors.js';
+import { clientIp, rateLimit } from '../lib/ratelimit.js';
 import { ServiceDidSchema } from '../lib/schemas.js';
 import { toPublicListing } from '../lib/serialize.js';
 import type { ListQuery, Store } from '../lib/store/index.js';
@@ -24,13 +26,23 @@ const ListQuerySchema = z.object({
 
 interface Deps {
   store: Store;
+  redis: Redis;
 }
 
 export function createReadRoutes(deps: Deps): Hono {
-  const { store } = deps;
+  const { store, redis } = deps;
   const r = new Hono();
 
   r.use('*', cors({ origin: '*', allowMethods: ['GET', 'OPTIONS'] }));
+  r.use(
+    '*',
+    rateLimit({
+      redis,
+      limit: 600,
+      windowSeconds: 60,
+      key: (c) => `read:${clientIp(c)}`,
+    }),
+  );
 
   r.get('/', async (c) => {
     const raw = Object.fromEntries(new URL(c.req.url).searchParams.entries());

@@ -1,10 +1,10 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { logger } from 'hono/logger';
 import type Redis from 'ioredis';
 import { getConfig } from './lib/config.js';
 import { RegistryError } from './lib/errors.js';
-import { getRedis } from './lib/redis.js';
+import { getLogger } from './lib/logger.js';
+import { closeRedis, getRedis } from './lib/redis.js';
 import { PgStore } from './lib/store/postgres.js';
 import type { Store } from './lib/store/index.js';
 import { startRevalidationCron } from './jobs/scheduler.js';
@@ -23,13 +23,30 @@ export interface AppDeps {
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
-  app.use('*', logger());
+
+  app.use('*', async (c, next) => {
+    const start = Date.now();
+    await next();
+    const ms = Date.now() - start;
+    // Skip access logs in test runs to keep test output readable.
+    if (process.env.NODE_ENV !== 'test') {
+      getLogger().info(
+        {
+          method: c.req.method,
+          path: new URL(c.req.url).pathname,
+          status: c.res.status,
+          ms,
+        },
+        'request',
+      );
+    }
+  });
 
   app.onError((err, c) => {
     if (err instanceof RegistryError) {
       return c.json(err.toEnvelope(), { status: err.status as 400 });
     }
-    console.error('Unhandled error:', err);
+    getLogger().error({ err }, 'unhandled error');
     return c.json(
       { error: { code: 'internal_error', message: 'Internal server error' } },
       500,
@@ -41,9 +58,6 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   app.route('/', healthRoutes);
-  // Read routes mount first so the CORS preflight handler answers OPTIONS
-  // before the write router. Method matching means GET-handlers in read
-  // don't shadow POST/PATCH/DELETE in listings.
   app.route('/v1/listings', createReadRoutes(deps));
   app.route('/v1/listings', createListingRoutes(deps));
   app.route('/admin', createAdminRoutes(deps));
@@ -56,20 +70,48 @@ export function createApp(deps: AppDeps): Hono {
 
 async function main(): Promise<void> {
   const cfg = getConfig();
+  const log = getLogger();
+
   const store = new PgStore();
   await store.init();
+  log.info('postgres connected, schema applied');
+
   const redis = getRedis();
+  // Force a ping so a misconfigured REDIS_URL fails at startup, not at first request.
+  await redis.ping();
+  log.info('redis connected');
+
   const app = createApp({ store, redis });
 
-  startRevalidationCron({ store, redis }, cfg.REGISTRY_CRON_SCHEDULE);
+  const cron = startRevalidationCron({ store, redis }, cfg.REGISTRY_CRON_SCHEDULE);
+  log.info({ schedule: cfg.REGISTRY_CRON_SCHEDULE }, 'revalidation cron scheduled');
 
-  serve(
+  const server = serve(
     { fetch: app.fetch, port: cfg.PORT },
     (info) => {
-      console.log(`registry.afauth.org listening on :${info.port} [${cfg.NODE_ENV}]`);
-      console.log(`[revalidate] cron scheduled: ${cfg.REGISTRY_CRON_SCHEDULE}`);
+      log.info({ port: info.port, env: cfg.NODE_ENV }, 'registry.afauth.org listening');
     },
   );
+
+  const shutdown = async (signal: string) => {
+    log.info({ signal }, 'shutting down');
+    cron.stop();
+    server.close();
+    try {
+      await store.close();
+    } catch (err) {
+      log.error({ err }, 'error closing postgres');
+    }
+    try {
+      await closeRedis();
+    } catch (err) {
+      log.error({ err }, 'error closing redis');
+    }
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
 const isEntry = import.meta.url === `file://${process.argv[1]}`;

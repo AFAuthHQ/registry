@@ -3,6 +3,7 @@ import type Redis from 'ioredis';
 import { didWebHost } from '../lib/did.js';
 import { RegistryError } from '../lib/errors.js';
 import { fetchText, hostFromUrl } from '../lib/fetch.js';
+import { clientIp, rateLimit } from '../lib/ratelimit.js';
 import {
   ChallengeRequestSchema,
   DiscoveryDocSchema,
@@ -41,7 +42,26 @@ export function createListingRoutes(deps: Deps): Hono {
   const { store, redis } = deps;
   const r = new Hono();
 
-  r.post('/challenge', async (c) => {
+  const challengeLimit = rateLimit({
+    redis,
+    limit: 30,
+    windowSeconds: 60,
+    key: (c) => `challenge:${clientIp(c)}`,
+  });
+  const submitLimit = rateLimit({
+    redis,
+    limit: 10,
+    windowSeconds: 60,
+    key: (c) => `submit:${clientIp(c)}`,
+  });
+  const mutateLimit = rateLimit({
+    redis,
+    limit: 30,
+    windowSeconds: 60,
+    key: (c) => `mutate:${clientIp(c)}`,
+  });
+
+  r.post('/challenge', challengeLimit, async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = ChallengeRequestSchema.safeParse(body);
     if (!parsed.success) {
@@ -75,7 +95,7 @@ export function createListingRoutes(deps: Deps): Hono {
     });
   });
 
-  r.post('/', async (c) => {
+  r.post('/', submitLimit, async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = ListingSubmitSchema.safeParse(body);
     if (!parsed.success) {
@@ -227,7 +247,7 @@ export function createListingRoutes(deps: Deps): Hono {
     );
   });
 
-  r.patch('/:did{.+}', async (c) => {
+  r.patch('/:did{.+}', mutateLimit, async (c) => {
     const did = decodeURIComponent(c.req.param('did'));
     if (!ServiceDidSchema.safeParse(did).success) {
       throw RegistryError.invalidRequest('Invalid service_did in path');
@@ -250,7 +270,7 @@ export function createListingRoutes(deps: Deps): Hono {
     return c.json(updated);
   });
 
-  r.delete('/:did{.+}', async (c) => {
+  r.delete('/:did{.+}', mutateLimit, async (c) => {
     const did = decodeURIComponent(c.req.param('did'));
     if (!ServiceDidSchema.safeParse(did).success) {
       throw RegistryError.invalidRequest('Invalid service_did in path');
