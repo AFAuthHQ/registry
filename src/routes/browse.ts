@@ -16,8 +16,26 @@ export function createBrowseRoutes(deps: Deps): Hono {
 
   r.get('/', async (c) => {
     const { listings } = await store.list({ limit: 100 });
+    const collectionLd = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: 'AFAuth Service Directory',
+      description:
+        'The canonical opt-in directory of services that have announced AFAuth (Agent-First Auth) support.',
+      url: `${siteBase()}/`,
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'registry.afauth.org',
+        url: siteBase(),
+      },
+      numberOfItems: listings.length,
+    };
     const page = layout({
       title: 'AFAuth Service Directory',
+      description:
+        'Browse services that have announced AFAuth support — opt-in, cryptographically host-proven, machine-readable at /v1/listings.',
+      path: '/',
+      jsonLd: collectionLd,
       body: html`
         <h1>AFAuth Service Directory</h1>
         <p>
@@ -58,9 +76,16 @@ export function createBrowseRoutes(deps: Deps): Hono {
       );
     }
     const title = rec.title ?? hostFromUrl(rec.discovery_url);
+    const descriptionText =
+      rec.description ??
+      `AFAuth-enabled service ${title} (${rec.service_did}) — discovery at ${rec.discovery_url}.`;
+    const pathForDid = `/listings/${encodeURIComponent(rec.service_did)}`;
     return c.html(
       layout({
         title: `${title} · registry.afauth.org`,
+        description: descriptionText,
+        path: pathForDid,
+        jsonLd: buildListingJsonLd(rec, title),
         body: renderDetail(rec),
       }),
     );
@@ -357,4 +382,42 @@ function escapeHtml(s: string): string {
 
 function escapeForScript(s: string): string {
   return s.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+}
+
+function siteBase(): string {
+  return (process.env.PUBLIC_BASE_URL ?? 'https://registry.afauth.org').replace(/\/$/, '');
+}
+
+function buildListingJsonLd(rec: ListingRecord, displayTitle: string): object {
+  const host = hostFromUrl(rec.discovery_url);
+  const detailUrl = `${siteBase()}/listings/${encodeURIComponent(rec.service_did)}`;
+  const doc = rec.discovery_doc as Record<string, unknown>;
+  const features = Array.isArray(doc.features) ? (doc.features as string[]) : [];
+  const recipients = Array.isArray(doc.recipient_types) ? (doc.recipient_types as string[]) : [];
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: displayTitle,
+    alternateName: rec.service_did,
+    identifier: rec.service_did,
+    description:
+      rec.description ??
+      `AFAuth-enabled service at ${host}. Discovery: ${rec.discovery_url}.`,
+    url: rec.discovery_url,
+    sameAs: [detailUrl, `${siteBase()}/v1/listings/${encodeURIComponent(rec.service_did)}`],
+    applicationCategory: 'WebApplication',
+    applicationSubCategory: 'AFAuth-enabled API',
+    operatingSystem: 'Cross-platform',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    keywords: [...rec.tags, ...features, ...recipients].join(', ') || undefined,
+    dateCreated: rec.first_listed_at,
+    dateModified: rec.updated_at,
+    isAccessibleForFree: true,
+    publisher: {
+      '@type': 'Organization',
+      name: host,
+      url: `https://${host}`,
+    },
+  };
 }

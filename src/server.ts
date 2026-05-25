@@ -15,6 +15,7 @@ import { createListingRoutes } from './routes/listings.js';
 import { operatorRoutes } from './routes/operator.js';
 import { policyRoutes } from './routes/policy.js';
 import { createReadRoutes } from './routes/read.js';
+import { createSeoRoutes } from './routes/seo.js';
 
 export interface AppDeps {
   store: Store;
@@ -58,6 +59,7 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   app.route('/', healthRoutes);
+  app.route('/', createSeoRoutes(deps));
   app.route('/v1/listings', createReadRoutes(deps));
   app.route('/v1/listings', createListingRoutes(deps));
   app.route('/admin', createAdminRoutes(deps));

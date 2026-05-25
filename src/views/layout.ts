@@ -221,19 +221,63 @@ const STYLE = `
   }
 `;
 
+const DEFAULT_DESCRIPTION =
+  'The canonical AFAuth service directory — services that have voluntarily announced AFAuth support by proving control of their discovery host. Informational, non-normative; conforming agents and services have no obligation to interact with it.';
+
+function baseUrl(): string {
+  return (process.env.PUBLIC_BASE_URL ?? 'https://registry.afauth.org').replace(/\/$/, '');
+}
+
 export interface LayoutOpts {
   title: string;
   body: HtmlEscapedString | Promise<HtmlEscapedString>;
+  /** Optional meta description; falls back to the directory's default. */
+  description?: string;
+  /** Request pathname (e.g. "/listings/did:web:example.com") for canonical URL. */
+  path?: string;
+  /** One or more schema.org JSON-LD payloads to inline into <head>. */
+  jsonLd?: object | object[];
 }
 
 export function layout(opts: LayoutOpts): HtmlEscapedString | Promise<HtmlEscapedString> {
+  const description = opts.description ?? DEFAULT_DESCRIPTION;
+  const canonical = `${baseUrl()}${opts.path ?? ''}`;
+  const jsonLdArr = opts.jsonLd
+    ? Array.isArray(opts.jsonLd)
+      ? opts.jsonLd
+      : [opts.jsonLd]
+    : [];
+  const jsonLdHtml = jsonLdArr
+    .map(
+      (obj) =>
+        `<script type="application/ld+json">${JSON.stringify(obj)
+          .replace(/</g, '\\u003c')
+          .replace(/>/g, '\\u003e')
+          .replace(/&/g, '\\u0026')}</script>`,
+    )
+    .join('\n');
+
   return html`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${opts.title}</title>
+<meta name="description" content="${description}">
+<link rel="canonical" href="${canonical}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="registry.afauth.org">
+<meta property="og:title" content="${opts.title}">
+<meta property="og:description" content="${description}">
+<meta property="og:url" content="${canonical}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${opts.title}">
+<meta name="twitter:description" content="${description}">
+<link rel="icon" type="image/svg+xml" href="https://afauth.org/favicon.svg">
+<link rel="alternate" type="text/markdown" title="LLM-friendly site summary" href="/llms.txt">
+<link rel="sitemap" type="application/xml" href="/sitemap.xml">
 <style>${raw(STYLE)}</style>
+${raw(jsonLdHtml)}
 </head>
 <body>
 <header class="site"><nav>
