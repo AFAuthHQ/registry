@@ -228,6 +228,29 @@ function baseUrl(): string {
   return (process.env.PUBLIC_BASE_URL ?? 'https://registry.afauth.org').replace(/\/$/, '');
 }
 
+/**
+ * Always-emitted top-level Organization JSON-LD. Declares that
+ * registry.afauth.org is one of three sibling properties under the
+ * AFAuth umbrella (along with afauth.org and docs.afauth.org), so
+ * search engines and LLM crawlers can consolidate link-equity and
+ * understand the relationship without parsing prose.
+ */
+const ORGANIZATION_JSONLD = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'AFAuth',
+  alternateName: 'Agent-First Auth',
+  url: 'https://afauth.org',
+  logo: 'https://afauth.org/favicon.svg',
+  sameAs: [
+    'https://afauth.org',
+    'https://docs.afauth.org',
+    'https://registry.afauth.org',
+    'https://github.com/AFAuthHQ',
+    'https://www.npmjs.com/org/afauthhq',
+  ],
+};
+
 export interface LayoutOpts {
   title: string;
   body: HtmlEscapedString | Promise<HtmlEscapedString>;
@@ -242,11 +265,13 @@ export interface LayoutOpts {
 export function layout(opts: LayoutOpts): HtmlEscapedString | Promise<HtmlEscapedString> {
   const description = opts.description ?? DEFAULT_DESCRIPTION;
   const canonical = `${baseUrl()}${opts.path ?? ''}`;
-  const jsonLdArr = opts.jsonLd
+  const extraJsonLd = opts.jsonLd
     ? Array.isArray(opts.jsonLd)
       ? opts.jsonLd
       : [opts.jsonLd]
     : [];
+  // Organization first so the parent-entity declaration leads.
+  const jsonLdArr: object[] = [ORGANIZATION_JSONLD, ...extraJsonLd];
   const jsonLdHtml = jsonLdArr
     .map(
       (obj) =>
@@ -286,6 +311,8 @@ ${raw(jsonLdHtml)}
   <a href="/operator">Operator</a>
   <a href="/policy">Policy</a>
   <span class="spacer"></span>
+  <a href="https://afauth.org" rel="noopener" title="AFAuth protocol home">afauth.org &#8599;</a>
+  <a href="https://docs.afauth.org" target="_blank" rel="noopener" title="AFAuth documentation">Docs &#8599;</a>
   <a href="https://github.com/AFAuthHQ/spec/blob/main/spec/directory.md" target="_blank" rel="noopener">Spec</a>
 </nav></header>
 <main>${opts.body}</main>

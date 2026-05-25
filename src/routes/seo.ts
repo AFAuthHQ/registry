@@ -1,8 +1,11 @@
 import { Hono } from 'hono';
+import type Redis from 'ioredis';
+import { clientIp, rateLimit } from '../lib/ratelimit.js';
 import type { Store } from '../lib/store/index.js';
 
 interface Deps {
   store: Store;
+  redis: Redis;
 }
 
 function baseUrl(): string {
@@ -69,6 +72,18 @@ const LLMS_TXT = `# registry.afauth.org — AFAuth service directory
 > a \`service_did\`. Membership is voluntary and informational; the
 > directory is non-normative and conforming AFAuth agents and services
 > are not required to interact with it.
+
+## Sibling sites (AFAuth constellation)
+
+AFAuth is documented across three coordinated properties. This site is
+the **data plane**. For the protocol itself and the developer
+documentation, follow the links below.
+
+- **Protocol home**: https://afauth.org/llms.txt — what AFAuth is, the manifesto, install paths for the CLI and SDK.
+- **Documentation**: https://docs.afauth.org/llms.txt — quickstarts, SDK reference, concepts, the §-by-§ spec walkthrough.
+- **Service directory** (this site): https://registry.afauth.org/llms.txt — opt-in registry of AFAuth-enabled services, mirrorable and non-normative.
+
+## About this site
 
 This site implements the informational service-directory convention
 from [spec/directory.md](https://github.com/AFAuthHQ/spec/blob/main/spec/directory.md)
@@ -140,7 +155,7 @@ one.
 `;
 
 export function createSeoRoutes(deps: Deps): Hono {
-  const { store } = deps;
+  const { store, redis } = deps;
   const r = new Hono();
 
   r.get('/robots.txt', (c) => {
@@ -155,7 +170,17 @@ export function createSeoRoutes(deps: Deps): Hono {
     return c.body(LLMS_TXT);
   });
 
-  r.get('/sitemap.xml', async (c) => {
+  // Sitemap fans out to the listings table — rate-limit so a bot that
+  // ignores cache-control can't drum the DB.
+  r.get(
+    '/sitemap.xml',
+    rateLimit({
+      redis,
+      limit: 60,
+      windowSeconds: 60,
+      key: (c) => `sitemap:${clientIp(c)}`,
+    }),
+    async (c) => {
     const base = baseUrl();
     const urls: { loc: string; lastmod?: string }[] = [
       { loc: `${base}/` },
@@ -191,18 +216,23 @@ export function createSeoRoutes(deps: Deps): Hono {
         .join('\n') +
       `\n</urlset>\n`;
 
-    c.header('content-type', 'application/xml; charset=utf-8');
-    c.header('cache-control', 'public, max-age=600, s-maxage=3600');
-    return c.body(body);
-  });
+      c.header('content-type', 'application/xml; charset=utf-8');
+      c.header('cache-control', 'public, max-age=600, s-maxage=3600');
+      return c.body(body);
+    },
+  );
 
   r.get('/favicon.ico', (c) => c.redirect('https://afauth.org/favicon.svg', 301));
   r.get('/favicon.svg', (c) => c.redirect('https://afauth.org/favicon.svg', 301));
 
   r.get('/.well-known/security.txt', (c) => {
+    // RFC 9116 §2.5.5: Expires is REQUIRED. Roll it one year out;
+    // bump on each touch of this file.
+    const expires = '2027-05-25T00:00:00.000Z';
     c.header('content-type', 'text/plain; charset=utf-8');
     return c.body(
       `Contact: mailto:[email protected]\n` +
+        `Expires: ${expires}\n` +
         `Preferred-Languages: en\n` +
         `Canonical: ${baseUrl()}/.well-known/security.txt\n` +
         `Policy: https://github.com/AFAuthHQ/.github/blob/main/SECURITY.md\n`,
