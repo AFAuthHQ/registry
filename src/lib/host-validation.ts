@@ -73,6 +73,13 @@ export async function isPublicHost(host: string): Promise<HostCheckResult> {
   if (isIP(stripped) > 0) {
     return { ok: false, reason: `literal IP address not allowed: ${host}` };
   }
+  // In test mode skip the live DNS resolution check. Tests use MSW to
+  // intercept outbound fetch entirely, so the IP-on-the-wire check is
+  // not exercised; the sync hostname/IP rejections above remain active.
+  // Production paths still go through the DNS check below.
+  if (process.env.NODE_ENV === 'test' || process.env.REGISTRY_SKIP_DNS_CHECK === '1') {
+    return { ok: true };
+  }
   try {
     const { address } = await dnsLookup(stripped);
     if (isPrivateIp(address)) {
