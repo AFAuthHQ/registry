@@ -10,6 +10,7 @@ const ConfigSchema = z.object({
   REGISTRY_CRON_SECRET: z.string().min(16),
   REGISTRY_ADMIN_SECRET: z.string().min(16),
   PUBLIC_BASE_URL: z.string().url().default('https://registry.afauth.org'),
+  REGISTRY_CRON_SCHEDULE: z.string().default('0 6 * * *'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

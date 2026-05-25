@@ -7,6 +7,8 @@ import { RegistryError } from './lib/errors.js';
 import { getRedis } from './lib/redis.js';
 import { PgStore } from './lib/store/postgres.js';
 import type { Store } from './lib/store/index.js';
+import { startRevalidationCron } from './jobs/scheduler.js';
+import { createAdminRoutes } from './routes/admin.js';
 import { healthRoutes } from './routes/health.js';
 import { createListingRoutes } from './routes/listings.js';
 import { createReadRoutes } from './routes/read.js';
@@ -41,6 +43,7 @@ export function createApp(deps: AppDeps): Hono {
   // don't shadow POST/PATCH/DELETE in listings.
   app.route('/v1/listings', createReadRoutes(deps));
   app.route('/v1/listings', createListingRoutes(deps));
+  app.route('/admin', createAdminRoutes(deps));
 
   return app;
 }
@@ -52,10 +55,13 @@ async function main(): Promise<void> {
   const redis = getRedis();
   const app = createApp({ store, redis });
 
+  startRevalidationCron({ store, redis }, cfg.REGISTRY_CRON_SCHEDULE);
+
   serve(
     { fetch: app.fetch, port: cfg.PORT },
     (info) => {
       console.log(`registry.afauth.org listening on :${info.port} [${cfg.NODE_ENV}]`);
+      console.log(`[revalidate] cron scheduled: ${cfg.REGISTRY_CRON_SCHEDULE}`);
     },
   );
 }
