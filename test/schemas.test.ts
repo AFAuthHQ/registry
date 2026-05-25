@@ -71,16 +71,52 @@ describe('ChallengeRequestSchema', () => {
 });
 
 describe('ListingSubmitSchema', () => {
-  it('requires challenge_token in ch_ format', () => {
+  it('requires challenge_token in ch_ + 22-char base64url format', () => {
     const base = {
       discovery_url: 'https://example.com/.well-known/afauth',
     };
     expect(
       ListingSubmitSchema.safeParse({ ...base, challenge_token: 'bad' }).success,
     ).toBe(false);
+    // Wrong length — too short
     expect(
       ListingSubmitSchema.safeParse({ ...base, challenge_token: 'ch_abc123' }).success,
+    ).toBe(false);
+    // Correct format: ch_ + 22 base64url chars
+    expect(
+      ListingSubmitSchema.safeParse({
+        ...base,
+        challenge_token: 'ch_AbCd1ef-gHIj_klmN0pqRs',
+      }).success,
     ).toBe(true);
+  });
+
+  it('rejects discovery_url with a private/loopback hostname', () => {
+    const challenge_token = 'ch_AbCd1ef-gHIj_klmN0pqRs';
+    expect(
+      ListingSubmitSchema.safeParse({
+        challenge_token,
+        discovery_url: 'https://localhost/.well-known/afauth',
+      }).success,
+    ).toBe(false);
+    expect(
+      ListingSubmitSchema.safeParse({
+        challenge_token,
+        discovery_url: 'https://127.0.0.1/.well-known/afauth',
+      }).success,
+    ).toBe(false);
+    expect(
+      ListingSubmitSchema.safeParse({
+        challenge_token,
+        discovery_url: 'https://10.0.0.5/.well-known/afauth',
+      }).success,
+    ).toBe(false);
+    expect(
+      ListingSubmitSchema.safeParse({
+        challenge_token,
+        discovery_url: 'https://[::1]/.well-known/afauth',
+      }).success,
+    ).toBe(false);
   });
 });
 

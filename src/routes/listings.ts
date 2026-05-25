@@ -105,6 +105,10 @@ export function createListingRoutes(deps: Deps): Hono {
     }
     const { discovery_url, challenge_token, title, description, tags } = parsed.data;
 
+    // Read challenge but DO NOT consume it yet. Consumption happens only
+    // after a successful create/re-challenge — failures along the way
+    // (network blip, schema validation) leave the challenge alive so the
+    // controller can retry without re-publishing the proof file.
     const challengeKey = `challenge:${challenge_token}`;
     const raw = await redis.get(challengeKey);
     if (!raw) {
@@ -121,15 +125,6 @@ export function createListingRoutes(deps: Deps): Hono {
         'proof_mismatch',
         'Challenge does not match submitted discovery_url',
         400,
-      );
-    }
-
-    const consumed = await redis.del(challengeKey);
-    if (consumed === 0) {
-      throw new RegistryError(
-        'challenge_already_used',
-        'Challenge was already consumed',
-        409,
       );
     }
 
@@ -197,13 +192,36 @@ export function createListingRoutes(deps: Deps): Hono {
     }
 
     const existing = await store.getByDid(serviceDid);
-    if (existing) {
-      if (existing.discovery_host !== host) {
+    if (existing && existing.status !== 'deleted' && existing.discovery_host !== host) {
+      throw RegistryError.conflict(
+        'Service DID is already listed under a different host',
+        { existing_host: existing.discovery_host, submitted_host: host },
+      );
+    }
+
+    if (!existing) {
+      const byHost = await store.getByHost(host);
+      if (byHost && byHost.status !== 'deleted') {
         throw RegistryError.conflict(
-          'Service DID is already listed under a different host',
-          { existing_host: existing.discovery_host, submitted_host: host },
+          'Discovery host is already listed for a different service_did',
+          { existing_did: byHost.service_did },
         );
       }
+    }
+
+    // All checks passed. Atomically consume the challenge: a concurrent
+    // submission with the same token races on DEL — first wins, the
+    // other gets challenge_already_used.
+    const consumed = await redis.del(challengeKey);
+    if (consumed === 0) {
+      throw new RegistryError(
+        'challenge_already_used',
+        'Challenge was already consumed by a concurrent submission',
+        409,
+      );
+    }
+
+    if (existing && existing.status !== 'deleted') {
       await revokePriorSessions(redis, serviceDid);
       await store.markRevalidationSuccess(serviceDid, doc, new Date());
       if (title !== undefined || description !== undefined || tags !== undefined) {
@@ -213,14 +231,6 @@ export function createListingRoutes(deps: Deps): Hono {
       return c.json(
         { service_did: serviceDid, session_token: token, expires_at: expiresAt },
         200,
-      );
-    }
-
-    const byHost = await store.getByHost(host);
-    if (byHost) {
-      throw RegistryError.conflict(
-        'Discovery host is already listed for a different service_did',
-        { existing_did: byHost.service_did },
       );
     }
 
@@ -263,8 +273,20 @@ export function createListingRoutes(deps: Deps): Hono {
         issues: parsed.error.issues,
       });
     }
+    if (Object.keys(parsed.data).length === 0) {
+      throw RegistryError.invalidRequest(
+        'PATCH body must include at least one writeable field (title, description, tags)',
+      );
+    }
+    // Check status BEFORE mutating: a still-valid session on a soft-deleted
+    // listing must not be allowed to bump updated_at and silently corrupt
+    // the deleted record.
+    const existing = await store.getByDid(did);
+    if (!existing || existing.status === 'deleted') {
+      throw RegistryError.notFound('Listing not found');
+    }
     const updated = await store.update(did, parsed.data);
-    if (!updated || updated.status === 'deleted') {
+    if (!updated) {
       throw RegistryError.notFound('Listing not found');
     }
     return c.json(updated);

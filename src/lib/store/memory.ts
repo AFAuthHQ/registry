@@ -72,7 +72,7 @@ export class MemoryStore implements Store {
 
   async update(did: string, input: UpdateListingInput): Promise<ListingRecord | null> {
     const existing = this.byDid.get(did);
-    if (!existing) return null;
+    if (!existing || existing.status === 'deleted') return null;
     const updated: ListingRecord = {
       ...existing,
       ...(input.title !== undefined ? { title: input.title } : {}),

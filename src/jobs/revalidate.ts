@@ -6,6 +6,7 @@ import type { ListingRecord, Store } from '../lib/store/index.js';
 
 const LOCK_KEY = 'revalidate:lock';
 const LOCK_TTL_SECONDS = 600;
+const LOCK_HEARTBEAT_INTERVAL_MS = 180_000; // 3 min — well inside the 10 min TTL
 
 const DEFAULTS = {
   staleAfterMs: 24 * 60 * 60 * 1000,
@@ -18,6 +19,14 @@ const DEFAULTS = {
 const RELEASE_LOCK_SCRIPT = `
   if redis.call('get', KEYS[1]) == ARGV[1] then
     return redis.call('del', KEYS[1])
+  else
+    return 0
+  end
+`;
+
+const REFRESH_LOCK_SCRIPT = `
+  if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('expire', KEYS[1], ARGV[2])
   else
     return 0
   end
@@ -52,12 +61,22 @@ export async function runRevalidation(
   const { store, redis } = deps;
 
   let lockToken: string | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
   if (cfg.useLock) {
     lockToken = randomBytes(16).toString('hex');
     const acquired = await redis.set(LOCK_KEY, lockToken, 'EX', LOCK_TTL_SECONDS, 'NX');
     if (acquired !== 'OK') {
       return emptyResult({ lockHeldByOther: true });
     }
+    // Heartbeat: while a tick is running, refresh the lock TTL so a slow
+    // tick can't expire mid-run and let a second replica race the same
+    // listings (which would double-increment the failure counter and
+    // weaken the §7 "≥3 consecutive failures" guarantee).
+    heartbeat = setInterval(() => {
+      void redis
+        .eval(REFRESH_LOCK_SCRIPT, 1, LOCK_KEY, lockToken!, String(LOCK_TTL_SECONDS))
+        .catch(() => undefined);
+    }, LOCK_HEARTBEAT_INTERVAL_MS);
   }
 
   try {
@@ -99,6 +118,7 @@ export async function runRevalidation(
 
     return result;
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
     if (cfg.useLock && lockToken) {
       await redis.eval(RELEASE_LOCK_SCRIPT, 1, LOCK_KEY, lockToken);
     }

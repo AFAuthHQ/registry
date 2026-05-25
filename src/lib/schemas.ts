@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isPrivateLiteralOrHostname } from './host-validation.js';
 
 export const ServiceDidSchema = z
   .string()
@@ -7,7 +8,14 @@ export const ServiceDidSchema = z
 export const DiscoveryUrlSchema = z
   .string()
   .url()
-  .refine((s) => s.startsWith('https://'), 'discovery_url must use https://');
+  .refine((s) => s.startsWith('https://'), 'discovery_url must use https://')
+  .refine((s) => {
+    try {
+      return !isPrivateLiteralOrHostname(new URL(s).hostname);
+    } catch {
+      return false;
+    }
+  }, 'discovery_url must use a publicly reachable hostname (not localhost, .local, RFC1918, etc.)');
 
 export const DiscoveryDocSchema = z
   .object({
@@ -79,7 +87,7 @@ export const ChallengeRequestSchema = z.object({
 
 export const ListingSubmitSchema = z.object({
   discovery_url: DiscoveryUrlSchema,
-  challenge_token: z.string().regex(/^ch_[A-Za-z0-9_-]+$/),
+  challenge_token: z.string().regex(/^ch_[A-Za-z0-9_-]{22}$/),
   title: z.string().max(120).optional(),
   description: z.string().max(500).optional(),
   tags: z.array(z.string().max(40)).max(20).optional(),

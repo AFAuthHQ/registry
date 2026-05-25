@@ -1,3 +1,5 @@
+import { isPublicHost } from './host-validation.js';
+
 const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -14,8 +16,10 @@ export interface FetchFail {
     | 'timeout'
     | 'network'
     | 'non_2xx'
+    | 'redirect_not_allowed'
     | 'too_large'
     | 'non_https'
+    | 'non_public_host'
     | 'invalid_content_type';
   status?: number;
   message: string;
@@ -31,16 +35,42 @@ export async function fetchText(
     return { ok: false, reason: 'non_https', message: 'URL must be https://' };
   }
 
+  const parsed = new URL(url);
+  const hostCheck = await isPublicHost(parsed.hostname);
+  if (!hostCheck.ok) {
+    return {
+      ok: false,
+      reason: 'non_public_host',
+      message: hostCheck.reason ?? 'host is not publicly reachable',
+    };
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
   try {
     const res = await fetch(url, {
       method: 'GET',
-      redirect: 'follow',
+      // Reject redirects entirely. Allowing them would let an attacker
+      // submit a discovery_url that 302s to an internal address — SSRF.
+      // The spec anchors proof on the host in the URL, not the redirect
+      // target, so a redirect breaks the anchor in any case.
+      redirect: 'manual',
       signal: controller.signal,
       headers: { 'user-agent': 'registry.afauth.org/0.1 (+https://afauth.org)' },
     });
+
+    // Hono / undici 'manual' redirect returns an opaqueredirect-ish response
+    // with status 0 in some runtimes, or the raw 3xx in Node fetch. Treat
+    // either as failure.
+    if (res.status >= 300 && res.status < 400) {
+      return {
+        ok: false,
+        reason: 'redirect_not_allowed',
+        status: res.status,
+        message: `Upstream issued ${res.status} redirect; redirects are not followed`,
+      };
+    }
 
     if (!res.ok) {
       return {
@@ -52,12 +82,14 @@ export async function fetchText(
     }
 
     const contentType = res.headers.get('content-type');
-    if (opts.expectContentType && contentType && !contentType.startsWith(opts.expectContentType)) {
-      return {
-        ok: false,
-        reason: 'invalid_content_type',
-        message: `Expected ${opts.expectContentType}, got ${contentType}`,
-      };
+    if (opts.expectContentType) {
+      if (!contentType || !contentType.startsWith(opts.expectContentType)) {
+        return {
+          ok: false,
+          reason: 'invalid_content_type',
+          message: `Expected ${opts.expectContentType}, got ${contentType ?? '(none)'}`,
+        };
+      }
     }
 
     const reader = res.body?.getReader();

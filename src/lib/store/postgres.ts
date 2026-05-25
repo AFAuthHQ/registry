@@ -148,7 +148,9 @@ export class PgStore implements Store {
     }
     values.push(serviceDid);
     const { rows } = await this.pool.query<Row>(
-      `UPDATE listings SET ${sets.join(', ')} WHERE service_did = $${i} RETURNING *`,
+      `UPDATE listings SET ${sets.join(', ')}
+         WHERE service_did = $${i} AND status <> 'deleted'
+       RETURNING *`,
       values,
     );
     return rows[0] ? rowToRecord(rows[0]) : null;
