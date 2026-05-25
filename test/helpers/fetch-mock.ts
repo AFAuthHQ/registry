@@ -40,7 +40,9 @@ export function mockHost(host: string, opts: MockedHost): void {
   fetchMock.use(...handlers);
 }
 
-export function validDiscoveryDoc(did = 'did:web:api.example.com') {
+import type { DiscoveryDoc } from '../../src/lib/schemas.js';
+
+export function validDiscoveryDoc(did = 'did:web:api.example.com'): DiscoveryDoc {
   return {
     afauth_version: '0.1',
     service_did: did,

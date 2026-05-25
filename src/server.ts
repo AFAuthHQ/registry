@@ -9,8 +9,11 @@ import { PgStore } from './lib/store/postgres.js';
 import type { Store } from './lib/store/index.js';
 import { startRevalidationCron } from './jobs/scheduler.js';
 import { createAdminRoutes } from './routes/admin.js';
+import { createBrowseRoutes } from './routes/browse.js';
 import { healthRoutes } from './routes/health.js';
 import { createListingRoutes } from './routes/listings.js';
+import { operatorRoutes } from './routes/operator.js';
+import { policyRoutes } from './routes/policy.js';
 import { createReadRoutes } from './routes/read.js';
 
 export interface AppDeps {
@@ -44,6 +47,9 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/v1/listings', createReadRoutes(deps));
   app.route('/v1/listings', createListingRoutes(deps));
   app.route('/admin', createAdminRoutes(deps));
+  app.route('/', createBrowseRoutes(deps));
+  app.route('/', operatorRoutes);
+  app.route('/', policyRoutes);
 
   return app;
 }
