@@ -1,11 +1,21 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
+import type Redis from 'ioredis';
 import { getConfig } from './lib/config.js';
 import { RegistryError } from './lib/errors.js';
+import { getRedis } from './lib/redis.js';
+import { PgStore } from './lib/store/postgres.js';
+import type { Store } from './lib/store/index.js';
 import { healthRoutes } from './routes/health.js';
+import { createListingRoutes } from './routes/listings.js';
 
-export function createApp(): Hono {
+export interface AppDeps {
+  store: Store;
+  redis: Redis;
+}
+
+export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
   app.use('*', logger());
 
@@ -25,16 +35,17 @@ export function createApp(): Hono {
   );
 
   app.route('/', healthRoutes);
-
-  // Phase 2 routes will mount under /v1/listings
-  // app.route('/v1/listings', listingRoutes);
+  app.route('/v1/listings', createListingRoutes(deps));
 
   return app;
 }
 
 async function main(): Promise<void> {
   const cfg = getConfig();
-  const app = createApp();
+  const store = new PgStore();
+  await store.init();
+  const redis = getRedis();
+  const app = createApp({ store, redis });
 
   serve(
     { fetch: app.fetch, port: cfg.PORT },

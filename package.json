@@ -28,9 +28,11 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/ioredis-mock": "^8.2.7",
     "@types/node": "^20.17.0",
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.11.10",
+    "ioredis-mock": "^8.13.1",
     "msw": "^2.6.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
