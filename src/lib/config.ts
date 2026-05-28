@@ -28,6 +28,20 @@ const ConfigSchema = z.object({
     .string()
     .default('')
     .transform((v) => v === '1' || v === 'true'),
+}).superRefine((cfg, ctx) => {
+  // Hard guard: refuse to boot in production with the e2e escape
+  // hatch enabled. A "MUST NOT in production" comment is not an
+  // enforcement; this is. See REGISTRY_E2E_DIRECT_INSERT's doc
+  // above for why this matters (it bypasses the challenge/proof
+  // ceremony and the HTTPS/public-host validation).
+  if (cfg.NODE_ENV === 'production' && cfg.REGISTRY_E2E_DIRECT_INSERT) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['REGISTRY_E2E_DIRECT_INSERT'],
+      message:
+        'REGISTRY_E2E_DIRECT_INSERT must not be enabled when NODE_ENV=production',
+    });
+  }
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
