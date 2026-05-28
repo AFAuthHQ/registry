@@ -30,6 +30,7 @@ export function createBrowseRoutes(deps: Deps): Hono {
       },
       numberOfItems: listings.length,
     };
+    const count = listings.length;
     const page = layout({
       title: 'AFAuth Service Directory',
       description:
@@ -37,18 +38,56 @@ export function createBrowseRoutes(deps: Deps): Hono {
       path: '/',
       jsonLd: collectionLd,
       body: html`
-        <h1>AFAuth Service Directory</h1>
-        <p>
-          Services that have voluntarily announced AFAuth support, by
-          proving control of their discovery host. Membership is opt-in
-          and independent of conformance: a listing means a service has
-          claimed AFAuth support, not that it has been audited.
+        <h1 style="font-size: 32px; line-height: 1.12; margin: 0 0 14px;">
+          AFAuth-ready services, in one place.
+        </h1>
+        <p class="lede" style="font-size: 17px; max-width: 62ch; margin: 0;">
+          Services that have announced AFAuth support. Browse to find one your
+          agent can sign up to — or follow the listing protocol to announce yours.
         </p>
-        <p>
-          Submission is via the <a href="https://github.com/AFAuthHQ/spec/blob/main/spec/directory.md#4-listing-protocol">§4 listing protocol</a>;
-          consumers fetch <code>/v1/listings</code>.
-        </p>
+
+        <div class="action-cards">
+          <div class="action-card">
+            <div class="action-eyebrow">For agents</div>
+            <p style="margin: 0 0 10px;">Pull the directory programmatically:</p>
+            <pre class="action-snippet"><code>curl https://registry.afauth.org/v1/listings</code></pre>
+            <p style="margin: 10px 0 0; font-size: 14px; color: var(--muted);">Or scroll to browse below.</p>
+          </div>
+          <div class="action-card">
+            <div class="action-eyebrow">For services</div>
+            <p style="margin: 0 0 10px;">Serve <code>/.well-known/afauth</code> and prove host control. Three steps, no account.</p>
+            <a href="#announce" class="action-arrow">How announcing works →</a>
+          </div>
+        </div>
+
+        <h2 id="directory" style="margin: 36px 0 14px; display: flex; align-items: baseline; gap: 10px;">
+          Directory
+          <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0;">${count} service${count === 1 ? '' : 's'}</span>
+        </h2>
         ${renderListings(listings)}
+
+        <section style="margin-top: 48px; padding-top: 28px; border-top: 1px solid var(--line);">
+          <h2 id="consume" style="margin: 0 0 12px;">Consume the directory</h2>
+          <p>Any client can read the directory anonymously. CORS-open, cursor-paginated.</p>
+          <pre class="action-snippet"><code>GET https://registry.afauth.org/v1/listings</code></pre>
+          <p style="font-size: 14px; color: var(--muted); margin-top: 10px;">
+            Paginate with <code>?cursor=…</code>. Filter by tag with <code>?tag=…</code>.
+            The per-service endpoint is <code>/v1/listings/:service_did</code>.
+          </p>
+        </section>
+
+        <section style="margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--line);">
+          <h2 id="announce" style="margin: 0 0 12px;">Announce a service</h2>
+          <p>Three moves. No account.</p>
+          <ol class="announce-steps">
+            <li>Serve <code>/.well-known/afauth</code> on your service host with the discovery JSON.</li>
+            <li><code>POST /v1/listings/challenge</code> — we issue a one-time token you serve on your host.</li>
+            <li><code>POST /v1/listings/submit</code> — we fetch your discovery doc, verify host control, and list you.</li>
+          </ol>
+          <p style="font-size: 14px; color: var(--muted);">
+            Normative protocol: <a href="https://github.com/AFAuthHQ/spec/blob/main/spec/directory.md#4-listing-protocol" target="_blank" rel="noopener">spec/directory.md §4</a>.
+          </p>
+        </section>
       `,
     });
     return c.html(page);
@@ -99,21 +138,7 @@ function renderListings(listings: ListingRecord[]) {
     return html`<p class="empty">No services listed yet. Be the first — see
       <a href="https://github.com/AFAuthHQ/spec/blob/main/spec/directory.md#41-initial-registration">§4.1 initial registration</a>.</p>`;
   }
-  return html`
-    <table class="listings">
-      <thead>
-        <tr>
-          <th>Service</th>
-          <th>Identity</th>
-          <th>Tags</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${raw(listings.map(renderRow).join(''))}
-      </tbody>
-    </table>
-  `;
+  return html`<div class="listings-list">${raw(listings.map(renderRow).join(''))}</div>`;
 }
 
 function renderRow(rec: ListingRecord): string {
@@ -123,46 +148,41 @@ function renderRow(rec: ListingRecord): string {
   const detailHref = `/listings/${encodeURI(rec.service_did)}`;
   const jsonHref = `/v1/listings/${encodeURI(rec.service_did)}`;
 
-  const titleHtml = `<a href="${detailHref}">${escapeHtml(titleText)}</a>`;
-  const descHtml = rec.description
-    ? `<div style="color:var(--muted);font-size:13px;margin-top:4px;">${escapeHtml(rec.description)}</div>`
-    : '';
-
   const features = (rec.discovery_doc.features ?? []) as string[];
   const recipients = (rec.discovery_doc.recipient_types ?? []) as string[];
-  const capPills = [
+  const pills = [
     ...features.map((f) => `<span class="cap-pill feat">${escapeHtml(f)}</span>`),
     ...recipients.map((rt) => `<span class="cap-pill">${escapeHtml(rt)}</span>`),
+    ...rec.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`),
   ].join('');
-  const capsHtml = capPills ? `<div style="margin-top:6px;">${capPills}</div>` : '';
 
   const versionBadge = rec.discovery_doc.afauth_version
     ? `<span class="version-badge">v${escapeHtml(rec.discovery_doc.afauth_version)}</span>`
     : '';
-  const discoveryUrlHtml = `<div class="row-meta"><a href="${escapeHtml(rec.discovery_url)}" target="_blank" rel="noopener">${escapeHtml(rec.discovery_url)}</a></div>`;
-
-  const tagsHtml = rec.tags.length
-    ? rec.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')
-    : '<span class="tag" style="opacity:0.5">—</span>';
-
-  const didCell = isKey
-    ? `<span class="mono">${escapeHtml(rec.service_did)}</span>${versionBadge}
-       <span class="didkey-warn" title="did:key carries no DNS+TLS anchor — see spec §3">⚠ no domain anchor</span>
-       <div class="mono" style="color:var(--muted);margin-top:4px;">via ${escapeHtml(host)}</div>
-       ${discoveryUrlHtml}`
-    : `<span class="mono">${escapeHtml(rec.service_did)}</span>${versionBadge}
-       ${discoveryUrlHtml}`;
+  const didkeyWarn = isKey
+    ? `<span class="didkey-warn" title="did:key carries no DNS+TLS anchor — see spec §3">⚠ no domain anchor</span>`
+    : '';
+  const viaHost = isKey
+    ? `<span class="listing-meta-sep">·</span><span>via ${escapeHtml(host)}</span>`
+    : '';
 
   const statusClass = rec.status === 'active' ? 'active' : rec.status === 'stale' ? 'stale' : '';
-  const updatedHtml = `<span class="updated" title="${escapeHtml(rec.updated_at)}">${escapeHtml(relativeTime(rec.updated_at))}</span>`;
-  const jsonLinkHtml = `<a class="json-link" href="${jsonHref}">JSON</a>`;
 
-  return `<tr>
-    <td class="name">${titleHtml}${descHtml}${capsHtml}</td>
-    <td class="did">${didCell}</td>
-    <td>${tagsHtml}</td>
-    <td class="status ${statusClass}">${escapeHtml(rec.status)}${updatedHtml}${jsonLinkHtml}</td>
-  </tr>`;
+  return `<article class="listing-row">
+    <div class="listing-row-head">
+      <a href="${detailHref}" class="listing-title">${escapeHtml(titleText)}</a>
+      <span class="listing-status ${statusClass}">${escapeHtml(rec.status)}</span>
+    </div>
+    ${rec.description ? `<p class="listing-desc">${escapeHtml(rec.description)}</p>` : ''}
+    <div class="listing-meta">
+      <span class="mono">${escapeHtml(rec.service_did)}</span>${versionBadge}${didkeyWarn}${viaHost}
+      <span class="listing-meta-sep">·</span>
+      <span title="${escapeHtml(rec.updated_at)}">${escapeHtml(relativeTime(rec.updated_at))}</span>
+      <span class="listing-meta-sep">·</span>
+      <a href="${jsonHref}" class="json-link">json &rarr;</a>
+    </div>
+    ${pills ? `<div class="listing-pills">${pills}</div>` : ''}
+  </article>`;
 }
 
 function renderDetail(rec: ListingRecord) {
