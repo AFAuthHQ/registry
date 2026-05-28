@@ -58,6 +58,18 @@ export function createAdminRoutes(deps: Deps): Hono {
     const { service_did, discovery_url, discovery_doc, title, description, tags } = parsed.data;
     const host = new URL(discovery_url).host;
 
+    // Idempotent upsert: if a listing already exists for this DID
+    // (e.g. left over from a previous harness run against a
+    // long-lived stack), refresh the mutable metadata via update()
+    // and return it. discovery_url/discovery_doc are immutable in
+    // the registry's data model and not refreshed here — tear the
+    // stack down with `down.sh -v` if those need to change.
+    const existing = await store.getByDid(service_did);
+    if (existing) {
+      const updated = await store.update(service_did, { title, description, tags });
+      return c.json(toPublicListing(updated ?? existing), 200);
+    }
+
     const rec = await store.create({
       service_did,
       discovery_url,

@@ -142,6 +142,35 @@ describe('POST /admin/e2e/listings (gated test-mode insert)', () => {
     expect(r.status).toBe(400);
   });
 
+  it('is idempotent: second POST returns 200 with refreshed metadata', async () => {
+    process.env.REGISTRY_E2E_DIRECT_INSERT = '1';
+    resetConfigForTest();
+    const app = await makeTestApp();
+
+    const r1 = await app.request('/admin/e2e/listings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(VALID_BODY),
+    });
+    expect(r1.status).toBe(201);
+
+    const updated = { ...VALID_BODY, title: 'Refreshed title', tags: ['v2'] };
+    const r2 = await app.request('/admin/e2e/listings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(updated),
+    });
+    expect(r2.status).toBe(200);
+    expect(r2.body.title).toBe('Refreshed title');
+    expect(r2.body.tags).toEqual(['v2']);
+
+    // The lookup reflects the updated metadata too.
+    const lookup = await app.request(
+      '/v1/listings/' + encodeURIComponent(VALID_BODY.service_did),
+    );
+    expect(lookup.body.title).toBe('Refreshed title');
+  });
+
   it('accepts http:// discovery_url (relaxed vs production schema)', async () => {
     process.env.REGISTRY_E2E_DIRECT_INSERT = '1';
     resetConfigForTest();
