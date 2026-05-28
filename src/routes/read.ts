@@ -63,7 +63,11 @@ export function createReadRoutes(deps: Deps): Hono {
   });
 
   r.get('/:did{.+}', async (c) => {
-    const did = decodeURIComponent(c.req.param('did'));
+    // Hono already URL-decodes the matched param once. Re-decoding
+    // here turns canonical did:web identifiers with port (e.g.
+    // `did:web:localhost%3A4003`) into the wrong key (`did:web:
+    // localhost:4003`) and breaks the store lookup.
+    const did = c.req.param('did');
     if (!ServiceDidSchema.safeParse(did).success) {
       throw RegistryError.invalidRequest('Invalid service_did in path');
     }
