@@ -50,23 +50,21 @@ export function createBrowseRoutes(deps: Deps): Hono {
           <div class="action-card">
             <div class="action-eyebrow">For agents</div>
             <p style="margin: 0 0 10px;">Pull the directory programmatically:</p>
-            <pre class="action-snippet"><code>curl https://registry.afauth.org/v1/listings</code></pre>
+            <div class="action-snippet copyable">
+              <code>curl https://registry.afauth.org/v1/listings</code>
+              <button type="button" class="copy-btn" data-copy="curl https://registry.afauth.org/v1/listings" aria-label="Copy command">
+                <span data-copy-label>Copy</span>
+              </button>
+            </div>
             <p style="margin: 10px 0 0; font-size: 14px; color: var(--muted);">Or scroll to browse below.</p>
           </div>
           <div class="action-card">
             <div class="action-eyebrow">For services</div>
-            <p style="margin: 0 0 10px;">Serve <code>/.well-known/afauth</code> and prove host control. Three steps, no account.</p>
-            <a href="#announce" class="action-arrow">How announcing works →</a>
+            <p style="margin: 0;">Serve <code>/.well-known/afauth</code> and prove host control. Three steps, no account.</p>
           </div>
         </div>
 
-        <h2 id="directory" style="margin: 36px 0 14px; display: flex; align-items: baseline; gap: 10px;">
-          Directory
-          <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0;">${count} service${count === 1 ? '' : 's'}</span>
-        </h2>
-        ${renderListings(listings)}
-
-        <section style="margin-top: 48px; padding-top: 28px; border-top: 1px solid var(--line);">
+        <section style="margin-top: 36px;">
           <h2 id="consume" style="margin: 0 0 12px;">Consume the directory</h2>
           <p>Any client can read the directory anonymously. CORS-open, cursor-paginated.</p>
           <pre class="action-snippet"><code>GET https://registry.afauth.org/v1/listings</code></pre>
@@ -88,6 +86,12 @@ export function createBrowseRoutes(deps: Deps): Hono {
             Normative protocol: <a href="https://github.com/AFAuthHQ/spec/blob/main/spec/directory.md#4-listing-protocol" target="_blank" rel="noopener">spec/directory.md §4</a>.
           </p>
         </section>
+
+        <h2 id="directory" style="margin: 48px 0 14px; padding-top: 28px; border-top: 1px solid var(--line); display: flex; align-items: baseline; gap: 10px;">
+          Directory
+          <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0;">${count} service${count === 1 ? '' : 's'}</span>
+        </h2>
+        ${renderListings(listings)}
       `,
     });
     return c.html(page);

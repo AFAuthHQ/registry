@@ -299,17 +299,44 @@ const STYLE = `
     font-size: 12px;
     margin: 8px 0 0;
   }
-  .action-arrow {
-    display: inline-block;
-    margin-top: 6px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--accent);
-    text-decoration: none;
+  .action-snippet.copyable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    overflow: hidden;
   }
-  .action-arrow:hover { text-decoration: underline; }
+  .action-snippet.copyable > code {
+    background: transparent;
+    padding: 0;
+    overflow-x: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .copy-btn {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: color 180ms, border-color 180ms, background 180ms;
+    flex-shrink: 0;
+  }
+  .copy-btn:hover {
+    color: var(--accent);
+    border-color: var(--line);
+    background: rgba(255, 255, 255, 0.4);
+  }
+  .copy-btn.copied {
+    color: #4a6e35;
+    border-color: #c5d9b5;
+  }
   @media (max-width: 640px) {
     .action-cards { grid-template-columns: 1fr; }
   }
@@ -492,6 +519,39 @@ ${raw(jsonLdHtml)}
   and
   <a href="https://github.com/AFAuthHQ/spec/blob/main/proposals/0003-service-directory.md" target="_blank" rel="noopener">AFAP-0003</a>.
 </footer>
+<script>
+(function () {
+  document.querySelectorAll('button[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-copy') || '';
+      var label = btn.querySelector('[data-copy-label]');
+      var original = label ? label.textContent : 'Copy';
+      var done = function () {
+        if (!label) return;
+        label.textContent = 'Copied';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          label.textContent = original;
+          btn.classList.remove('copied');
+        }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(done);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+    });
+  });
+})();
+</script>
 </body>
 </html>`;
 }
