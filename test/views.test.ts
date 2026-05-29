@@ -72,6 +72,16 @@ describe('GET / (browse)', () => {
     expect(body).toContain('No services listed yet');
   });
 
+  it('announce steps reference the real submit route (POST /v1/listings), not /submit', async () => {
+    const app = await makeTestApp();
+    const res = await app.request('/');
+    const body: string = res.body;
+    expect(body).toContain('<code>POST /v1/listings/challenge</code>');
+    // The submit route is POST /v1/listings — there is no /v1/listings/submit.
+    expect(body).not.toContain('/v1/listings/submit');
+    expect(body).toContain('<code>POST /v1/listings</code> — we fetch');
+  });
+
   it('renders the listings table', async () => {
     const app = await makeTestApp();
     await register(app, 'api.example.com', 'did:web:api.example.com', {

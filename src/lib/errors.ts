@@ -1,7 +1,6 @@
 export type ErrorCode =
   | 'invalid_request'
   | 'invalid_challenge'
-  | 'challenge_expired'
   | 'challenge_already_used'
   | 'proof_mismatch'
   | 'proof_fetch_failed'

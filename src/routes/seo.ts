@@ -126,7 +126,7 @@ to \`deleted\`.
   "discovery_url": "https://api.example.com/.well-known/afauth",
   "discovery_doc": {
     "afauth_version": "0.1",
-    "endpoints": { "accounts": "/v1/accounts", "claim": "/v1/claim" },
+    "endpoints": { "accounts": "/v1/accounts", "owner_invitation": "/v1/owner-invitations", "claim_page": "/claim", "claim_completion": "/v1/claim/complete" },
     "features": ["key_rotation"],
     "recipient_types": ["email"],
     "signature_algorithms": ["ed25519"]

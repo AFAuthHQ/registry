@@ -80,7 +80,7 @@ export function createBrowseRoutes(deps: Deps): Hono {
           <ol class="announce-steps">
             <li>Serve <code>/.well-known/afauth</code> on your service host with the discovery JSON.</li>
             <li><code>POST /v1/listings/challenge</code> — we issue a one-time token you serve on your host.</li>
-            <li><code>POST /v1/listings/submit</code> — we fetch your discovery doc, verify host control, and list you.</li>
+            <li><code>POST /v1/listings</code> — we fetch your discovery doc, verify host control, and list you.</li>
           </ol>
           <p style="font-size: 14px; color: var(--muted);">
             Normative protocol: <a href="https://github.com/AFAuthHQ/spec/blob/main/spec/directory.md#4-listing-protocol" target="_blank" rel="noopener">spec/directory.md §4</a>.
