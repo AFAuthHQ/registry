@@ -112,7 +112,7 @@ describe('GET / (browse)', () => {
     expect(body).toContain('I &lt;3 AFAuth &amp; &quot;directories&quot;');
   });
 
-  it('exposes discovery URL, afauth_version, capability pills, and JSON link per row', async () => {
+  it('exposes service host, afauth_version, capability pills, and JSON link per row', async () => {
     const app = await makeTestApp();
     await registerDirect(app, 'api.example.com', 'did:web:api.example.com', {
       title: 'Example',
@@ -124,8 +124,9 @@ describe('GET / (browse)', () => {
     });
     const res = await app.request('/');
     const body: string = res.body;
-    // discovery_url surfaced (Tier 1 #1)
-    expect(body).toContain('https://api.example.com/.well-known/afauth');
+    // service_did surfaced as the row's machine identifier (Tier 1 #1).
+    // The full discovery URL lives on the detail page, not the index row.
+    expect(body).toContain('did:web:api.example.com');
     // afauth_version badge (Tier 1 #2)
     expect(body).toContain('v0.1');
     // features + recipient_types pills (Tier 1 #4)

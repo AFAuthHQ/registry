@@ -157,11 +157,14 @@ describe('Organization JSON-LD on layout-rendered pages', () => {
     expect(body).toContain('"@type":"SoftwareApplication"');
   });
 
-  it('every layout-rendered page links back to afauth.org and docs', async () => {
+  it('every layout-rendered page links back to afauth.org and AFAuth GitHub', async () => {
     const app = await makeTestApp();
     const res = await app.request('/operator');
     const body: string = res.body;
+    // Layout nav surfaces the canonical AFAuth umbrella and GitHub.
+    // docs.afauth.org is cross-linked from /llms.txt (covered above),
+    // not the nav — the nav matches afauth.org's own bar.
     expect(body).toMatch(/href="https:\/\/afauth\.org"/);
-    expect(body).toMatch(/href="https:\/\/docs\.afauth\.org"/);
+    expect(body).toMatch(/href="https:\/\/github\.com\/AFAuthHQ"/);
   });
 });
