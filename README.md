@@ -13,7 +13,7 @@ discovery.
 
 ## Status
 
-**v0.1 — Working Draft.** Tracking the `spec/directory.md` v0.1 surface.
+**v0.1.** Tracking the `spec/directory.md` v0.1 surface.
 
 ## Stack
 
