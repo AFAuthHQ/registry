@@ -11,6 +11,11 @@ Conforming agents and services have **no obligation** to interact with
 this directory; it exists for opt-in announcement and cold-start
 discovery.
 
+> Sibling service: the canonical **trust attestor** at
+> [`trust.afauth.org`](https://github.com/AFAuthHQ/trust) (AFAP-0006) lets
+> agents link to a human and mint the attestation JWTs that spam-resistant
+> `attested_only` services require.
+
 ## Status
 
 **v0.1.** Tracking the `spec/directory.md` v0.1 surface.
