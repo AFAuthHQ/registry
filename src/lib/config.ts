@@ -13,6 +13,17 @@ const ConfigSchema = z.object({
   REGISTRY_CRON_SCHEDULE: z.string().default('0 6 * * *'),
 
   /**
+   * Number of trusted reverse proxies between the public internet and
+   * this service. Used to pick the real client IP from the RIGHT of
+   * X-Forwarded-For for rate-limit bucketing (see lib/ratelimit.ts).
+   * Default 1 (a single edge proxy such as Railway/Cloudflare). It MUST
+   * NOT exceed the real proxy depth, or a client-forged left entry would
+   * become trusted (audit #6). Read directly from env in ratelimit.ts;
+   * declared here for validation + documentation.
+   */
+  REGISTRY_TRUSTED_PROXY_HOPS: z.coerce.number().int().min(1).default(1),
+
+  /**
    * E2E-test escape hatch. When set to `1` or `true`, enables
    * `POST /admin/e2e/listings` — an unauthenticated endpoint that
    * inserts a listing directly from a caller-supplied

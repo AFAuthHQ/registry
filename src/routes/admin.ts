@@ -9,6 +9,7 @@ import {
   ServiceDidSchema,
 } from '../lib/schemas.js';
 import { toPublicListing } from '../lib/serialize.js';
+import { constantTimeEqual } from '../lib/tokens.js';
 import type { Store } from '../lib/store/index.js';
 
 interface Deps {
@@ -90,5 +91,9 @@ function requireBearer(header: string | undefined, expected: string): void {
     throw RegistryError.unauthorized('Missing bearer token');
   }
   const provided = header.slice('Bearer '.length).trim();
-  if (provided !== expected) throw RegistryError.unauthorized('Invalid bearer token');
+  // Constant-time compare so the admin/cron secret can't be recovered via
+  // a timing side-channel on this internet-reachable endpoint (audit #7).
+  if (!constantTimeEqual(provided, expected)) {
+    throw RegistryError.unauthorized('Invalid bearer token');
+  }
 }

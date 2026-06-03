@@ -1,4 +1,5 @@
-import { isPublicHost } from './host-validation.js';
+import { Agent } from 'undici';
+import { resolveVettedHost } from './host-validation.js';
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_BODY_BYTES = 64 * 1024;
@@ -35,30 +36,53 @@ export async function fetchText(
     return { ok: false, reason: 'non_https', message: 'URL must be https://' };
   }
 
-  const parsed = new URL(url);
-  const hostCheck = await isPublicHost(parsed.hostname);
-  if (!hostCheck.ok) {
-    return {
-      ok: false,
-      reason: 'non_public_host',
-      message: hostCheck.reason ?? 'host is not publicly reachable',
-    };
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { ok: false, reason: 'network', message: 'malformed URL' };
   }
+
+  // Resolve + vet the host ONCE, and capture the exact IP we will connect
+  // to. The connection is then pinned to this IP (below), so undici cannot
+  // re-resolve the hostname to a rebound private address between the check
+  // and the connect (audit #1 — DNS rebinding).
+  const vetted = await resolveVettedHost(parsed.hostname);
+  if (!vetted.ok) {
+    return { ok: false, reason: 'non_public_host', message: vetted.reason };
+  }
+
+  // Pin the connection: undici's connector calls this `lookup` instead of
+  // DNS, so it connects to exactly the vetted IP. TLS SNI / certificate
+  // validation still use the original hostname (undici derives servername
+  // from the URL), so legitimate certificates keep validating.
+  const agent = new Agent({
+    connect: {
+      lookup: ((_hostname: string, _options: unknown, cb: (err: Error | null, addresses: Array<{ address: string; family: number }>) => void) => {
+        cb(null, [{ address: vetted.ip, family: vetted.family }]);
+      }) as never,
+    },
+  });
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
+  // `dispatcher` is an undici extension to RequestInit not present in the
+  // DOM lib types; attach it without tripping excess-property checks.
+  const init: RequestInit = {
+    method: 'GET',
+    // Reject redirects entirely. Following them would re-introduce the
+    // SSRF the IP-pin closes (a 302 to an internal address) and breaks the
+    // spec's host-anchored proof. Combined with the pin, there is no path
+    // to a second, unvetted resolution.
+    redirect: 'manual',
+    signal: controller.signal,
+    headers: { 'user-agent': 'registry.afauth.org/0.1 (+https://afauth.org)' },
+  };
+  (init as { dispatcher?: unknown }).dispatcher = agent;
+
   try {
-    const res = await fetch(url, {
-      method: 'GET',
-      // Reject redirects entirely. Allowing them would let an attacker
-      // submit a discovery_url that 302s to an internal address — SSRF.
-      // The spec anchors proof on the host in the URL, not the redirect
-      // target, so a redirect breaks the anchor in any case.
-      redirect: 'manual',
-      signal: controller.signal,
-      headers: { 'user-agent': 'registry.afauth.org/0.1 (+https://afauth.org)' },
-    });
+    const res = await fetch(url, init);
 
     // Hono / undici 'manual' redirect returns an opaqueredirect-ish response
     // with status 0 in some runtimes, or the raw 3xx in Node fetch. Treat
@@ -127,6 +151,8 @@ export async function fetchText(
     };
   } finally {
     clearTimeout(timeout);
+    // Release the pinned connection pool; ignore close errors.
+    void agent.close().catch(() => {});
   }
 }
 

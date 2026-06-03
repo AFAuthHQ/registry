@@ -31,16 +31,33 @@ export function rateLimit(opts: RateLimitOpts): MiddlewareHandler {
 }
 
 /**
- * Returns the client IP. Behind a trusted proxy (Railway, Cloudflare),
- * X-Forwarded-For is the source of truth; falls back to X-Real-IP, then
- * a sentinel. Use only for rate-limit bucketing — not for any
- * authorization decision.
+ * Returns the client IP for rate-limit bucketing ONLY (never for any
+ * authorization decision).
+ *
+ * X-Forwarded-For is a client-APPENDED list: a request arrives as
+ * `clientForged, ..., seenByProxyN` where each trusted proxy appends the
+ * address IT observed on the RIGHT. The leftmost entries are fully
+ * attacker-controlled. We therefore trust only the entry
+ * `REGISTRY_TRUSTED_PROXY_HOPS` from the right (default 1, matching a
+ * single edge proxy such as Railway/Cloudflare). Trusting the leftmost
+ * value let an attacker rotate XFF to mint unlimited buckets and defeat
+ * every IP rate limit (audit #6).
+ *
+ * Set REGISTRY_TRUSTED_PROXY_HOPS to the number of proxies between the
+ * public internet and this service. It MUST NOT exceed the real depth, or
+ * a forged left entry becomes trusted.
  */
 export function clientIp(c: Context): string {
+  const parsed = Number(process.env.REGISTRY_TRUSTED_PROXY_HOPS ?? '1');
+  const hops = Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
   const xff = c.req.header('x-forwarded-for');
   if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
+    const parts = xff.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      const idx = Math.min(parts.length - 1, Math.max(0, parts.length - hops));
+      const pick = parts[idx];
+      if (pick) return pick;
+    }
   }
   const realIp = c.req.header('x-real-ip');
   if (realIp) return realIp;

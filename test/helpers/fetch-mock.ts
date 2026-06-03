@@ -1,12 +1,27 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll } from 'vitest';
+import { __setHostResolverForTests } from '../../src/lib/host-validation.js';
 
 export const fetchMock = setupServer();
 
-beforeAll(() => fetchMock.listen({ onUnhandledRequest: 'error' }));
-afterEach(() => fetchMock.resetHandlers());
-afterAll(() => fetchMock.close());
+beforeAll(() => {
+  fetchMock.listen({ onUnhandledRequest: 'error' });
+  // Resolve every (non-literal, non-private-name) host to a fixed public
+  // TEST-NET-3 address so the SSRF host-vetting runs offline and
+  // deterministically; MSW intercepts the actual request before the pin
+  // is ever used. Per-test overrides can inject a private IP to exercise
+  // the reject path.
+  __setHostResolverForTests(async () => [{ address: '203.0.113.10', family: 4 }]);
+});
+afterEach(() => {
+  fetchMock.resetHandlers();
+  __setHostResolverForTests(async () => [{ address: '203.0.113.10', family: 4 }]);
+});
+afterAll(() => {
+  fetchMock.close();
+  __setHostResolverForTests(null);
+});
 
 export interface MockedHost {
   proof?: { body: string; contentType?: string; status?: number };
