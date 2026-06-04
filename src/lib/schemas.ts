@@ -40,7 +40,10 @@ export const DiscoveryDocSchema = z
       .optional(),
     limits: z
       .object({
-        unclaimed_ttl_seconds: z.number().int().min(0).optional(),
+        // Optional and off by default: absent means unclaimed accounts never
+        // expire (the recommended posture). If a service does opt into a TTL,
+        // the spec floor is 3600s (well-known.json §4.4).
+        unclaimed_ttl_seconds: z.number().int().min(3600).optional(),
         unclaimed_rate_limit_per_hour: z.number().int().min(0).optional(),
       })
       .optional(),
