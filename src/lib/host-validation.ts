@@ -74,6 +74,13 @@ export function isPrivateIp(ip: string): boolean {
     // address can't hide behind the `::ffff:` (or bare `::`) prefix.
     const mapped = embeddedIpv4(lower);
     if (mapped && isIP(mapped) === 4) return isPrivateIp(mapped);
+    // NAT64 (64:ff9b::/96 well-known + 64:ff9b:1::/48 local, RFC 8215) and
+    // 6to4 (2002::/16, deprecated) embed an IPv4 destination that a
+    // DNS64/NAT64 or 6to4 gateway translates to — including internal and
+    // metadata addresses. The registry only ever needs ordinary public web
+    // servers, so reject these transition prefixes outright (audit M-1).
+    if (lower.startsWith('64:ff9b:')) return true;
+    if (lower.startsWith('2002:')) return true;
     if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 ULA
     if (/^fe[89ab]/.test(lower)) return true;  // fe80::/10 link-local
     if (lower.startsWith('ff')) return true;   // ff00::/8 multicast
