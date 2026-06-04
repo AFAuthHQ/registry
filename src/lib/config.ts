@@ -1,6 +1,27 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+/**
+ * Known placeholder/example secret values (and common weak ones). The
+ * repo is public, so the `.env.example` placeholders are world-known;
+ * a deployment that boots with one of these has, in effect, no secret.
+ */
+const PLACEHOLDER_SECRET_RE =
+  /change[\s_-]?me|replace[\s_-]?me|placeholder|^changeit$|^changeme$|^secret$|^password$|^example/i;
+
+/**
+ * Returns a human-readable reason a secret is too weak for production,
+ * or null if it is acceptable. Only enforced when NODE_ENV=production
+ * so local/dev/test stay low-friction.
+ */
+function productionSecretIssue(value: string): string | null {
+  if (value.length < 32) return 'must be at least 32 characters in production';
+  if (PLACEHOLDER_SECRET_RE.test(value)) {
+    return 'must not be a placeholder/example value in production';
+  }
+  return null;
+}
+
 const ConfigSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -52,6 +73,23 @@ const ConfigSchema = z.object({
       message:
         'REGISTRY_E2E_DIRECT_INSERT must not be enabled when NODE_ENV=production',
     });
+  }
+
+  // Fail closed on weak/placeholder secrets in production. The base
+  // schema only enforces min(16); the published `.env.example`
+  // placeholders satisfy that, so without this guard a copy-paste
+  // deployment would boot with a world-known secret.
+  if (cfg.NODE_ENV === 'production') {
+    for (const key of ['REGISTRY_CRON_SECRET', 'REGISTRY_ADMIN_SECRET'] as const) {
+      const issue = productionSecretIssue(cfg[key]);
+      if (issue) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} ${issue}`,
+        });
+      }
+    }
   }
 });
 
