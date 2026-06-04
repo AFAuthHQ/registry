@@ -1,5 +1,7 @@
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type Redis from 'ioredis';
 import { getConfig } from './lib/config.js';
 import { RegistryError } from './lib/errors.js';
@@ -42,6 +44,52 @@ export function createApp(deps: AppDeps): Hono {
       );
     }
   });
+
+  // Security response headers. Applied to every response, including
+  // /v1/* JSON APIs and error responses. CSP is HTML-meaningful but
+  // harmless on JSON. `script-src 'self'` is real (the only client
+  // script is served from /registry.js); `style-src` allows the inline
+  // <style> block in views/layout.ts. img-src allows the favicon hosted
+  // at https://afauth.org.
+  app.use('*', async (c, next) => {
+    await next();
+    c.header('strict-transport-security', 'max-age=63072000; includeSubDomains; preload');
+    c.header('x-content-type-options', 'nosniff');
+    c.header('x-frame-options', 'DENY');
+    c.header('referrer-policy', 'strict-origin-when-cross-origin');
+    c.header('permissions-policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+    c.header(
+      'content-security-policy',
+      [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' https://afauth.org data:",
+        "connect-src 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+      ].join('; '),
+    );
+  });
+
+  // Cap request bodies before they are buffered into memory. Submission
+  // payloads are small (discovery docs are fetched server-side, not
+  // posted), so 256 KB is generous; this blocks memory-exhaustion DoS.
+  app.use(
+    '*',
+    bodyLimit({
+      maxSize: 256 * 1024,
+      onError: (c) =>
+        c.json(
+          { error: { code: 'payload_too_large', message: 'Request body too large' } },
+          413,
+        ),
+    }),
+  );
+
+  // Static client assets (served same-origin so CSP can stay tight).
+  app.use('/registry.js', serveStatic({ path: './public/registry.js' }));
 
   app.onError((err, c) => {
     if (err instanceof RegistryError) {

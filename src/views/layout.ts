@@ -519,39 +519,7 @@ ${raw(jsonLdHtml)}
   and
   <a href="https://github.com/AFAuthHQ/spec/blob/main/proposals/0003-service-directory.md" target="_blank" rel="noopener">AFAP-0003</a>.
 </footer>
-<script>
-(function () {
-  document.querySelectorAll('button[data-copy]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var text = btn.getAttribute('data-copy') || '';
-      var label = btn.querySelector('[data-copy-label]');
-      var original = label ? label.textContent : 'Copy';
-      var done = function () {
-        if (!label) return;
-        label.textContent = 'Copied';
-        btn.classList.add('copied');
-        setTimeout(function () {
-          label.textContent = original;
-          btn.classList.remove('copied');
-        }, 1600);
-      };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done).catch(done);
-      } else {
-        var ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        try { document.execCommand('copy'); } catch (e) {}
-        document.body.removeChild(ta);
-        done();
-      }
-    });
-  });
-})();
-</script>
+<script src="/registry.js"></script>
 </body>
 </html>`;
 }
