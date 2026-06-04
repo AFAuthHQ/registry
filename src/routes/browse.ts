@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
+import type Redis from 'ioredis';
 import { hostFromUrl } from '../lib/fetch.js';
+import { rateLimit, clientIp } from '../lib/ratelimit.js';
 import { ServiceDidSchema } from '../lib/schemas.js';
 import { toPublicListing } from '../lib/serialize.js';
 import type { ListingRecord, Store } from '../lib/store/index.js';
@@ -8,11 +10,25 @@ import { layout } from '../views/layout.js';
 
 interface Deps {
   store: Store;
+  redis: Redis;
 }
 
 export function createBrowseRoutes(deps: Deps): Hono {
-  const { store } = deps;
+  const { store, redis } = deps;
   const r = new Hono();
+
+  // The HTML browse pages fan out to the DB on every hit (the JSON API
+  // and sitemap are already rate-limited; these were not). Cap per IP so
+  // a bot that ignores cache-control can't drum the DB (audit M-1).
+  r.use(
+    '*',
+    rateLimit({
+      redis,
+      limit: 120,
+      windowSeconds: 60,
+      key: (c) => `browse:ip:${clientIp(c)}`,
+    }),
+  );
 
   r.get('/', async (c) => {
     const { listings } = await store.list({ limit: 100 });

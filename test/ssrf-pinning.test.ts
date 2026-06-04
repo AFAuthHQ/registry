@@ -43,6 +43,29 @@ describe('isPrivateIp — IPv4-mapped / -compat IPv6 (audit #8 H-1)', () => {
   });
 });
 
+describe('isPrivateIp — NAT64 / 6to4 transition ranges (audit M-1)', () => {
+  it.each([
+    '64:ff9b::a9fe:a9fe', // NAT64 well-known prefix → 169.254.169.254
+    '64:ff9b::7f00:1', // NAT64 → 127.0.0.1
+    '64:ff9b:1::a9fe:a9fe', // NAT64 local-use prefix (RFC 8215)
+    '2002:a9fe:a9fe::', // 6to4 embedding 169.254.169.254
+    '2002:0a00:0001::1', // 6to4 embedding 10.0.0.1
+  ])('classifies %s as private', (ip) => {
+    expect(isPrivateIp(ip)).toBe(true);
+  });
+
+  it('still treats ordinary global-unicast v6 as public', () => {
+    expect(isPrivateIp('2606:4700:4700::1111')).toBe(false);
+    expect(isPrivateIp('2001:4860:4860::8888')).toBe(false);
+  });
+
+  it('rejects a public host that resolves to a NAT64 address', async () => {
+    __setHostResolverForTests(async () => [{ address: '64:ff9b::a9fe:a9fe', family: 6 }]);
+    const r = await resolveVettedHost('nat64.attacker.example');
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe('resolveVettedHost — rebinding & private-resolution (audit #1)', () => {
   it('rejects a public hostname that resolves to a private IP', async () => {
     __setHostResolverForTests(async () => [{ address: '169.254.169.254', family: 4 }]);

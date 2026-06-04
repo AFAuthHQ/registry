@@ -4,8 +4,19 @@
  *     nosniff, frame-options, referrer/permissions policy)
  *   - request body-size limit (memory-exhaustion DoS guard)
  */
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { makeTestApp } from './helpers/app.js';
+import { resetConfigForTest } from '../src/lib/config.js';
+
+// The cron handler calls getConfig() (for REGISTRY_CRON_SECRET), so the
+// required env must be present in this process for that route to run.
+beforeAll(() => {
+  process.env.DATABASE_URL = 'postgres://x:x@localhost:5432/x';
+  process.env.REDIS_URL = 'redis://localhost:6379';
+  process.env.REGISTRY_CRON_SECRET = 'c7f3a9e1b5d28406c9a1f4e7b2d6803a5c9e1f4b';
+  process.env.REGISTRY_ADMIN_SECRET = '9b2e4f7a1c8d05369e7b3a1f6c4d8092b5e1a7f3';
+  resetConfigForTest();
+});
 
 describe('security response headers', () => {
   it('sets the hardening headers on a normal response', async () => {
@@ -58,5 +69,31 @@ describe('request body-size limit', () => {
       body: JSON.stringify({ discovery_url: 'not-a-url' }),
     });
     expect(res.status).not.toBe(413);
+  });
+});
+
+describe('rate limiting', () => {
+  const CRON_LIMIT = 30; // keep in sync with createAdminRoutes
+  const BROWSE_LIMIT = 120; // keep in sync with createBrowseRoutes
+
+  it('rate-limits POST /admin/cron/revalidate before auth (429 after the cap)', async () => {
+    const app = await makeTestApp();
+    let last = 0;
+    for (let i = 0; i < CRON_LIMIT + 1; i++) {
+      // No bearer: the limiter runs first, so over the cap it's 429 not 401.
+      const r = await app.request('/admin/cron/revalidate', { method: 'POST' });
+      last = r.status;
+    }
+    expect(last).toBe(429);
+  });
+
+  it('rate-limits the unauthenticated browse page GET / (429 after the cap)', async () => {
+    const app = await makeTestApp();
+    let last = 0;
+    for (let i = 0; i < BROWSE_LIMIT + 1; i++) {
+      const r = await app.request('/');
+      last = r.status;
+    }
+    expect(last).toBe(429);
   });
 });
