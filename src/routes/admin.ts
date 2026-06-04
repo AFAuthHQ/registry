@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getConfig } from '../lib/config.js';
 import { RegistryError } from '../lib/errors.js';
 import { runRevalidation } from '../jobs/revalidate.js';
+import { rateLimit, clientIp } from '../lib/ratelimit.js';
 import {
   DiscoveryDocSchema,
   ServiceDidSchema,
@@ -31,14 +32,27 @@ const E2EListingSchema = z.object({
 });
 
 export function createAdminRoutes(deps: Deps): Hono {
-  const { store } = deps;
+  const { store, redis } = deps;
   const r = new Hono();
 
-  r.post('/cron/revalidate', async (c) => {
-    requireBearer(c.req.header('authorization'), getConfig().REGISTRY_CRON_SECRET);
-    const result = await runRevalidation(deps);
-    return c.json(result);
-  });
+  // Throttle the cron endpoint per IP — runs BEFORE auth so brute-force
+  // of the secret and revalidation-amplification are both bounded. A
+  // full pass scans the DB and fans out outbound fetches, so this is the
+  // abuse target (audit M-2). In-process node-cron does not hit this.
+  r.post(
+    '/cron/revalidate',
+    rateLimit({
+      redis,
+      limit: 30,
+      windowSeconds: 60,
+      key: (c) => `admin-cron:ip:${clientIp(c)}`,
+    }),
+    async (c) => {
+      requireBearer(c.req.header('authorization'), getConfig().REGISTRY_CRON_SECRET);
+      const result = await runRevalidation(deps);
+      return c.json(result);
+    },
+  );
 
   // Test-mode direct-insert. Gated behind REGISTRY_E2E_DIRECT_INSERT=1.
   // 404s in any deployment where the flag is unset. See lib/config.ts
