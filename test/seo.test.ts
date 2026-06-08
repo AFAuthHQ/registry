@@ -168,3 +168,21 @@ describe('Organization JSON-LD on layout-rendered pages', () => {
     expect(body).toMatch(/href="https:\/\/github\.com\/AFAuthHQ"/);
   });
 });
+
+describe('Social card meta (Open Graph / Twitter)', () => {
+  it('layout-rendered pages ship a large summary card with the registry OG image', async () => {
+    const app = await makeTestApp();
+    const res = await app.request('/operator');
+    const body: string = res.body;
+    // Previously twitter:card was "summary" with no image, so shares
+    // rendered as a text-only card. Now a large image card.
+    expect(body).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(body).not.toContain('<meta name="twitter:card" content="summary">');
+    expect(body).toMatch(
+      /<meta property="og:image" content="https:\/\/afauth\.org\/og-registry\.png">/,
+    );
+    expect(body).toMatch(
+      /<meta name="twitter:image" content="https:\/\/afauth\.org\/og-registry\.png">/,
+    );
+  });
+});
