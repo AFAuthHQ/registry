@@ -18,7 +18,11 @@ const ROBOTS_TXT = `# registry.afauth.org — AFAuth service directory
 # that have announced AFAuth support. Crawlers — including LLM training
 # and search bots — are explicitly welcome.
 
+# Content Signals (https://contentsignals.org): this directory exists for
+# agents — every AI use is permitted. Search indexing, AI input
+# (RAG/grounding), and model training are all explicitly allowed.
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 Disallow: /admin/
 

@@ -34,6 +34,22 @@ describe('GET /robots.txt', () => {
     expect(body).toContain('Google-Extended');
     // Sitemap pointer
     expect(body).toMatch(/Sitemap:\s+https?:\/\/[^\s]+\/sitemap\.xml/);
+    // Content Signals (contentsignals.org): the directory opts INTO every
+    // AI use — it exists to be read by agents.
+    expect(body).toMatch(/Content-Signal:.*search=yes/);
+    expect(body).toMatch(/Content-Signal:.*ai-input=yes/);
+    expect(body).toMatch(/Content-Signal:.*ai-train=yes/);
+  });
+});
+
+describe('Agent discovery: Link header', () => {
+  it('advertises the llms.txt markdown index via an RFC 8288 Link header', async () => {
+    const app = await makeTestApp();
+    const res = await app.request('/');
+    const link = res.headers.get('link');
+    expect(link).toContain('/llms.txt');
+    expect(link).toContain('rel="alternate"');
+    expect(link).toContain('text/markdown');
   });
 });
 
