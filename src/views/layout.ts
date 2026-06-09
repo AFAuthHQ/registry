@@ -500,8 +500,8 @@ ${raw(jsonLdHtml)}
 <header class="site"><nav>
   <a class="brand" href="/" aria-label="AFAuth service registry — home">
     <svg viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M14 46 L32 14 L50 46 Z" fill="none" stroke="#B83227" stroke-width="5" stroke-linejoin="round"/>
-      <circle cx="32" cy="36" r="3.5" fill="#B83227"/>
+      <circle cx="24.5" cy="32" r="12.5" fill="none" stroke="#B83227" stroke-width="6"/>
+      <circle cx="39.5" cy="32" r="12.5" fill="none" stroke="#15110A" stroke-width="6"/>
     </svg>
     <span class="wordmark">AFAuth</span>
     <span class="surface">Registry</span>
