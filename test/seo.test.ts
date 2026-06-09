@@ -53,6 +53,27 @@ describe('Agent discovery: Link header', () => {
   });
 });
 
+describe('Markdown content negotiation on /', () => {
+  it('serves text/markdown when the client sends Accept: text/markdown', async () => {
+    const app = await makeTestApp();
+    const res = await app.request('/', { headers: { accept: 'text/markdown' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/markdown/);
+    // Vary: Accept so a shared cache keys the two representations apart.
+    expect(res.headers.get('vary')).toMatch(/accept/i);
+    const body: string = res.body;
+    expect(body).toContain('# registry.afauth.org');
+    expect(body).toContain('/v1/listings');
+  });
+
+  it('falls through to the HTML browse page for normal browser requests', async () => {
+    const app = await makeTestApp();
+    const res = await app.request('/');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+  });
+});
+
 describe('GET /llms.txt', () => {
   it('serves a markdown llms.txt with the sibling-sites cross-link block', async () => {
     const app = await makeTestApp();

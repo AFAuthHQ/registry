@@ -162,6 +162,25 @@ export function createSeoRoutes(deps: Deps): Hono {
   const { store, redis } = deps;
   const r = new Hono();
 
+  // Markdown content negotiation (agent-readiness L3 "Agent-Readable"):
+  // when a client explicitly asks for text/markdown, serve the
+  // machine-readable llms.txt view of the homepage instead of HTML.
+  // Browsers and crawlers don't send Accept: text/markdown, so they fall
+  // through to the HTML browse page (createBrowseRoutes, mounted later).
+  // Vary: Accept stops a shared cache from serving one representation in
+  // place of the other. This is mounted before the browse route so it wins
+  // the Accept-match and can pass through when it declines.
+  r.get('/', async (c, next) => {
+    if (!(c.req.header('accept') ?? '').includes('text/markdown')) {
+      await next();
+      return;
+    }
+    c.header('content-type', 'text/markdown; charset=utf-8');
+    c.header('cache-control', 'public, max-age=300');
+    c.header('vary', 'Accept');
+    return c.body(LLMS_TXT);
+  });
+
   r.get('/robots.txt', (c) => {
     c.header('content-type', 'text/plain; charset=utf-8');
     // Short cache: robots.txt carries discovery directives (Content-Signal,
